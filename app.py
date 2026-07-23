@@ -2,8 +2,10 @@ import streamlit as st
 from pathlib import Path
 import pandas as pd
 import plotly.graph_objects as go
+import chromadb
+import ollama
 
-st.set_page_config(page_title="Pokedex", page_icon=":pokeball:", layout="wide")
+st.set_page_config(page_title="Pokedex", layout="wide")
 
 STATS = ["hp", "attack", "defense", "special_attack", "special_defense", "speed"]
 COLOR_TIPO = {
@@ -23,6 +25,65 @@ def badge_html(tipo):                                # 'píldora' HTML con el no
     return f'<span class="badge">{tipo}</span>' if pd.notna(tipo) else ""  # "" si el tipo es nulo
 
 
+def cargar_indice():
+    carpeta_indice = Path(__file__).parent / "chroma_pokedex"
+    if not carpeta_indice.exists():
+        return None
+
+    try:
+        cliente = chromadb.PersistentClient(path=str(carpeta_indice))
+        return cliente.get_collection("fichas_pokemon")
+    except Exception:
+        return None
+
+
+def recuperar_contexto(coleccion, pregunta, k=4):
+    if coleccion is None:
+        return []
+
+    pregunta_embed = f"query: {pregunta}"
+    vector_pregunta = ollama.embed(model="embeddinggemma", input=pregunta_embed)["embeddings"][0]
+    resultado = coleccion.query(query_embeddings=[vector_pregunta], n_results=k)
+    return resultado.get("documents", [[]])[0]
+
+
+def responder_chat(modelo, contexto, pregunta):
+    contexto_unido = "\n\n".join([f"- {doc}" for doc in contexto]) if contexto else ""
+    system_prompt = (
+        "Eres un asistente experto de Pokemon para una Pokedex escolar. "
+        "Responde siempre en espanol, claro y breve. "
+        "Si no encuentras la respuesta en el contexto, dilo con honestidad y sugiere consultar otro Pokemon."
+    )
+
+    user_prompt = (
+        "Contexto recuperado de la base de conocimiento:\n"
+        f"{contexto_unido}\n\n"
+        "Pregunta del usuario:\n"
+        f"{pregunta}"
+    )
+
+    respuesta = ollama.chat(
+        model=modelo,
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+    )
+    return respuesta["message"]["content"]
+
+
+def obtener_modelos_ollama():
+    try:
+        respuesta = ollama.list()
+        modelos = []
+        for item in respuesta.get("models", []):
+            nombre = item.get("model") or item.get("name")
+            if nombre:
+                modelos.append(nombre)
+        return modelos
+    except Exception:
+        return []
+
 @st.cache_data
 def cargar():
     return pd.read_csv(Path(__file__).parent / "pokemon.csv")
@@ -34,6 +95,19 @@ busca = st.sidebar.text_input("Busca por nombre", placeholder="Ejemplo: Pikachu"
 sel_tipo = st.sidebar.multiselect("Tipo principal", sorted(df["type_1"].dropna().unique()))
 solo_legendarios = st.sidebar.checkbox("Solo legendarios")
 total_min = st.sidebar.slider("Total de stats mínimo", 0, int(df["total"].max()), 0, 10)
+st.sidebar.divider()
+st.sidebar.subheader("Chat IA")
+modelos_ollama = obtener_modelos_ollama()
+if modelos_ollama:
+    preferido = next((m for m in modelos_ollama if "qwen" in m.lower()), modelos_ollama[0])
+    modelo_chat = st.sidebar.selectbox(
+        "Modelo Ollama",
+        options=modelos_ollama,
+        index=modelos_ollama.index(preferido),
+    )
+else:
+    modelo_chat = st.sidebar.text_input("Modelo Ollama", value="qwen3.6:latest")
+    st.sidebar.caption("No pude listar modelos automaticamente. Escribe el nombre exacto.")
 
 
 f = df.copy()
@@ -46,7 +120,7 @@ if solo_legendarios:
 f = f[f["total"] >= total_min]    
 
 
-tab_inicio, tab_dex, tab_ficha, tab_versus = st.tabs(["Inicio", "Pokedex", "Ficha", "Comparador"])
+tab_inicio, tab_dex, tab_ficha, tab_versus, tab_chat = st.tabs(["Inicio", "Pokedex", "Ficha", "Comparador", "Chat"])
 
 with tab_ficha:
     izq, der = st.columns([1,2 ]) # [1,2] significa que la columna izquierda ocupa 1/3 del ancho y la derecha 2/3
@@ -127,5 +201,45 @@ with tab_inicio:
       <p>Los primeros {len(df)} Pokémon · datos de la PokéAPI · hecho con Streamlit</p>
     </div>
     """, unsafe_allow_html=True)
+
+
+with tab_chat:
+    st.subheader("Chat Pokédex")
+    st.caption("Pregunta sobre tipos, stats o descripciones. Usa tu modelo Qwen de Ollama.")
+
+    coleccion = cargar_indice()
+    if coleccion is None:
+        st.error("No encuentro el indice vectorial. Ejecuta preparar_corpus.py para crearlo.")
+    else:
+        if "chat_historial" not in st.session_state:
+            st.session_state.chat_historial = []
+
+        for mensaje in st.session_state.chat_historial:
+            with st.chat_message(mensaje["role"]):
+                st.markdown(mensaje["content"])
+
+        pregunta = st.chat_input("Ejemplo: que pokemon tiene mas velocidad?")
+        if pregunta:
+            st.session_state.chat_historial.append({"role": "user", "content": pregunta})
+            with st.chat_message("user"):
+                st.markdown(pregunta)
+
+            with st.chat_message("assistant"):
+                with st.spinner("Pensando..."):
+                    try:
+                        contexto = recuperar_contexto(coleccion, pregunta, k=4)
+                        respuesta = responder_chat(modelo_chat.strip(), contexto, pregunta)
+                    except Exception as e:
+                        detalle = str(e)
+                        if "not found" in detalle.lower():
+                            respuesta = (
+                                "Error al consultar el chat: el modelo seleccionado no existe en Ollama. "
+                                "Elige uno del selector de la barra lateral."
+                            )
+                        else:
+                            respuesta = f"Error al consultar el chat: {detalle}"
+                st.markdown(respuesta)
+
+            st.session_state.chat_historial.append({"role": "assistant", "content": respuesta})
 
     
