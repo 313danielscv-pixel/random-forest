@@ -12,7 +12,7 @@ from ml_al_alfa.train import ARTIFACTS_DIR
 from ml_al_alfa.forecasting import MAX_FORECAST_DAYS, forecast_to_date
 
 st.set_page_config(
-    page_title="Machine Learning Al Alfa",
+    page_title="Random Forest",
     page_icon="🏠",
     layout="wide",
 )
@@ -370,7 +370,7 @@ def show_forecast_project(project: str, bundle: dict[str, Any]) -> None:
         )
 
 
-st.title("Machine Learning Al Alfa")
+st.title("Random Forest")
 st.write(
     "Proyecto de regresion de principio a fin: compara un baseline con modelos "
     "entrenados y explora predicciones de forma interactiva."

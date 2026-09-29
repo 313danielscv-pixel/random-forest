@@ -1,6 +1,6 @@
-# Machine Learning Al Alfa
+# Random Forest
 
-Proyecto de *machine learning* de principio a fin: desde formular una pregunta y limpiar los datos hasta comparar modelos, guardar el mejor y probar predicciones en una aplicación de Streamlit.
+Proyecto educativo de *machine learning* centrado en comparar Random Forest con regresión lineal y un baseline, desde la limpieza de datos hasta las predicciones en Streamlit.
 
 Incluye proyectos de **viviendas de California**, **precios de Airbnb en Madrid**, **seguro médico**, **viviendas de Ames**, **nacimientos en EE. UU.**, **demanda eléctrica en España** y **energía solar en España**. Entrena cada conjunto para generar su modelo y habilitarlo en Streamlit.
 
@@ -217,7 +217,7 @@ El descargador de Airbnb guarda `listings.csv.gz` en `data/raw/`. Los datos desc
 ## Archivos principales
 
 ```text
-Machine Learning Al Alfa/
+Random Forest/
 ├── app.py
 ├── notebooks/
 │   ├── california_housing.ipynb
