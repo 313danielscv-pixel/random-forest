@@ -1,4 +1,4 @@
-# Random Forest
+# Random Forest VS Regresión Lineal
 
 Proyecto educativo de *machine learning* centrado en comparar Random Forest con regresión lineal y un baseline, desde la limpieza de datos hasta las predicciones en Streamlit.
 
